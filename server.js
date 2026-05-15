@@ -64,6 +64,100 @@ function normalizarTexto(mensagem) {
     .replace(/^\/\s+/, "/");
 }
 
+app.get("/painel", (req, res) => {
+  const numeros = Object.keys(atendimentoHumano);
+
+  const lista = numeros.length
+    ? numeros.map(numero => `
+      <div class="card">
+        <strong>${numero}</strong>
+        <div>
+          <a class="btn assumir" href="/assumir/${numero}">Assumir</a>
+          <a class="btn encerrar" href="/encerrar/${numero}">Encerrar</a>
+        </div>
+      </div>
+    `).join("")
+    : "<p>Nenhum atendimento humano ativo.</p>";
+
+  res.send(`
+    <html>
+      <head>
+        <meta charset="UTF-8" />
+        <title>Painel Altive</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            background: #0f172a;
+            color: white;
+            padding: 30px;
+          }
+
+          h1 {
+            color: #38bdf8;
+          }
+
+          .card {
+            background: #1e293b;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          }
+
+          .btn {
+            padding: 10px 15px;
+            border-radius: 8px;
+            text-decoration: none;
+            color: white;
+            margin-left: 8px;
+          }
+
+          .assumir {
+            background: #2563eb;
+          }
+
+          .encerrar {
+            background: #16a34a;
+          }
+        </style>
+      </head>
+
+      <body>
+        <h1>Painel de Atendimento Altive</h1>
+        ${lista}
+      </body>
+    </html>
+  `);
+});
+
+app.get("/assumir/:numero", async (req, res) => {
+  const numero = req.params.numero;
+
+  atendimentoHumano[numero] = true;
+
+  await enviarMensagem(
+    numero,
+    "✅ Atendimento assumido por um especialista da Altive."
+  );
+
+  res.redirect("/painel");
+});
+
+app.get("/encerrar/:numero", async (req, res) => {
+  const numero = req.params.numero;
+
+  delete atendimentoHumano[numero];
+
+  await enviarMensagem(
+    numero,
+    "A Altive agradece o seu contato! O atendimento humano foi encerrado e nossa assistente virtual está de volta. 🚀"
+  );
+
+  res.redirect("/painel");
+});
+
 app.post("/webhook", async (req, res) => {
   try {
     console.log("BODY COMPLETO:", JSON.stringify(req.body, null, 2));
@@ -125,7 +219,7 @@ app.post("/webhook", async (req, res) => {
 
       await enviarMensagem(
         numero,
-        "Perfeito. Vou encaminhar você para um especialista da Altive 👨‍💻\n\nPor favor, aguarde um instante. Enquanto isso, pode me adiantar qual serviço você procura?"
+        "Perfeito. Vou encaminhar você para um especialista da Altive 👨‍💻\n\nPor favor, aguarde um instante."
       );
 
       return res.sendStatus(200);
