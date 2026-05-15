@@ -11,9 +11,9 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-const INSTANCE_ID = "3F3296F6F6BD626842C082171A0617F6";
-const INSTANCE_TOKEN = "1241E4AE2EE6AD994D0E3AA4";
-const CLIENT_TOKEN = "F784187382a7e42cd8cc6c2b69b72f83cS";
+const INSTANCE_ID = process.env.ZAPI_INSTANCE_ID;
+const INSTANCE_TOKEN = process.env.ZAPI_INSTANCE_TOKEN;
+const CLIENT_TOKEN = process.env.ZAPI_CLIENT_TOKEN;
 
 const atendimentoHumano = {};
 
@@ -32,36 +32,58 @@ async function enviarMensagem(numero, mensagem) {
   );
 }
 
+function pegarMensagem(body) {
+  return (
+    body.text?.message ||
+    body.body ||
+    body.message?.conversation ||
+    ""
+  );
+}
+
+function pegarNumero(body) {
+  return (
+    body.phone ||
+    body.senderPhone ||
+    body.from ||
+    body.chatId ||
+    ""
+  );
+}
+
+function normalizarTexto(mensagem) {
+  return mensagem
+    .trim()
+    .toLowerCase()
+    .replace(/^\/\s+/, "/");
+}
+
 app.post("/webhook", async (req, res) => {
   try {
     console.log("BODY COMPLETO:", JSON.stringify(req.body, null, 2));
 
-    const mensagem =
-      req.body.text?.message ||
-      req.body.body ||
-      req.body.message?.conversation ||
-      "";
-
-    const numero =
-      req.body.phone ||
-      req.body.senderPhone ||
-      req.body.from ||
-      req.body.chatId ||
-      "";
-
+    const mensagem = pegarMensagem(req.body);
+    const numero = pegarNumero(req.body);
     const fromMe = req.body.fromMe === true;
 
     if (!mensagem || !numero) {
       return res.sendStatus(200);
     }
 
-    const texto = mensagem.trim().toLowerCase();
+    const texto = normalizarTexto(mensagem);
 
     console.log("Mensagem:", mensagem);
     console.log("Número:", numero);
     console.log("FromMe:", fromMe);
 
-    if (texto.startsWith("/assumir")) {
+    const comandoAssumir = texto.startsWith("/assumir");
+    const comandoEncerrar = texto.startsWith("/encerrar");
+
+    if ((comandoAssumir || comandoEncerrar) && !fromMe) {
+      return res.sendStatus(200);
+    }
+
+    if (comandoAssumir) {
       atendimentoHumano[numero] = true;
 
       await enviarMensagem(
@@ -72,12 +94,12 @@ app.post("/webhook", async (req, res) => {
       return res.sendStatus(200);
     }
 
-    if (texto.startsWith("/encerrar")) {
+    if (comandoEncerrar) {
       delete atendimentoHumano[numero];
 
       await enviarMensagem(
         numero,
-        "A Altive agradece o seu contato! Caso precise de algo, estaremos à disposição 🚀"
+        "A Altive agradece o seu contato! O atendimento humano foi encerrado e a nossa assistente virtual está de volta para continuar te ajudando por aqui. 🚀"
       );
 
       return res.sendStatus(200);
@@ -86,7 +108,6 @@ app.post("/webhook", async (req, res) => {
     if (fromMe) {
       return res.sendStatus(200);
     }
-
 
     if (
       texto.includes("especialista") ||
@@ -194,13 +215,13 @@ IMPORTANTE:
 
     await enviarMensagem(numero, resposta);
 
-    res.sendStatus(200);
+    return res.sendStatus(200);
   } catch (erro) {
     console.log("Erro:", erro.response?.data || erro.message);
-    res.sendStatus(500);
+    return res.sendStatus(500);
   }
-});	
+});
 
 app.listen(3000, () => {
   console.log("Altive IA profissional online 🚀");
-});	
+});
