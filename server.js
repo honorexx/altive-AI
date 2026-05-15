@@ -199,10 +199,8 @@ IMPORTANTE:
     console.log("Erro:", erro.response?.data || erro.message);
     res.sendStatus(500);
   }
-});
+});	
 
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
+app.listen(3000, () => {
   console.log("Altive IA profissional online 🚀");
 });	
