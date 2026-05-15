@@ -58,7 +58,7 @@ function pegarNumero(body) {
 }
 
 function normalizarTexto(mensagem) {
-  return mensagem
+  return String(mensagem || "")
     .trim()
     .toLowerCase()
     .replace(/^\/\s+/, "/");
@@ -81,19 +81,13 @@ app.post("/webhook", async (req, res) => {
     console.log("Mensagem:", mensagem);
     console.log("Número:", numero);
     console.log("FromMe:", fromMe);
-    console.log("Modo humano desse número:", atendimentoHumano[numero]);
+    console.log("Modo humano:", atendimentoHumano[numero]);
 
     const comandoAssumir = texto.startsWith("/assumir");
     const comandoEncerrar = texto.startsWith("/encerrar");
 
-    if ((comandoAssumir || comandoEncerrar) && !fromMe) {
-      return res.sendStatus(200);
-    }
-
     if (comandoAssumir) {
       atendimentoHumano[numero] = true;
-
-      console.log("Modo humano ATIVADO para:", numero);
 
       await enviarMensagem(
         numero,
@@ -106,11 +100,9 @@ app.post("/webhook", async (req, res) => {
     if (comandoEncerrar) {
       delete atendimentoHumano[numero];
 
-      console.log("Modo humano ENCERRADO para:", numero);
-
       await enviarMensagem(
         numero,
-        "A Altive agradece o seu contato! O atendimento humano foi encerrado e a nossa assistente virtual está de volta para continuar te ajudando por aqui. 🚀"
+        "A Altive agradece o seu contato! O atendimento humano foi encerrado e nossa assistente virtual está de volta. 🚀"
       );
 
       return res.sendStatus(200);
@@ -131,8 +123,6 @@ app.post("/webhook", async (req, res) => {
     ) {
       atendimentoHumano[numero] = true;
 
-      console.log("Cliente pediu atendimento humano:", numero);
-
       await enviarMensagem(
         numero,
         "Perfeito. Vou encaminhar você para um especialista da Altive 👨‍💻\n\nPor favor, aguarde um instante. Enquanto isso, pode me adiantar qual serviço você procura?"
@@ -142,7 +132,6 @@ app.post("/webhook", async (req, res) => {
     }
 
     if (atendimentoHumano[numero]) {
-      console.log("IA pausada porque atendimento humano está ativo:", numero);
       return res.sendStatus(200);
     }
 
@@ -159,8 +148,6 @@ app.post("/webhook", async (req, res) => {
 
       return res.sendStatus(200);
     }
-
-    console.log("Chamando IA para responder:", mensagem);
 
     const respostaIA = await openai.chat.completions.create({
       model: "gpt-4.1-mini",
@@ -233,7 +220,7 @@ IMPORTANTE:
 - Não confirme orçamento fechado sem especialista.
 - Não envie respostas muito longas sem necessidade.
 `
-        },
+         },
         {
           role: "user",
           content: mensagem
@@ -243,11 +230,7 @@ IMPORTANTE:
 
     const resposta = respostaIA.choices[0].message.content;
 
-    console.log("Resposta da IA:", resposta);
-
     await enviarMensagem(numero, resposta);
-
-    console.log("Resposta enviada para:", numero);
 
     return res.sendStatus(200);
   } catch (erro) {
