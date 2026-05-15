@@ -11,9 +11,9 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-const INSTANCE_ID = process.env.ZAPI_INSTANCE_ID;
-const INSTANCE_TOKEN = process.env.ZAPI_INSTANCE_TOKEN;
-const CLIENT_TOKEN = process.env.ZAPI_CLIENT_TOKEN;
+const INSTANCE_ID = "3F3296F6F6BD626842C082171A0617F6";
+const INSTANCE_TOKEN = "1241E4AE2EE6AD994D0E3AA4";
+const CLIENT_TOKEN = "F784187382a7e42cd8cc6c2b69b72f83cS";
 
 const atendimentoHumano = {};
 
