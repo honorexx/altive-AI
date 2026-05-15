@@ -230,7 +230,6 @@ app.post("/webhook", async (req, res) => {
     }
 
     if (
-      texto.includes("site") ||
       texto.includes("link") ||
       texto.includes("endereço") ||
       texto.includes("endereco")
@@ -264,7 +263,7 @@ A Altive cria soluções digitais para empresas, como:
 • transformação digital
 
 SEU PAPEL:
-Você não deve apenas fazer perguntas. Você deve entender o problema do cliente e sugerir soluções reais, práticas e profissionais.
+Você não deve apenas fazer perguntas. Você deve entender o problema do cliente e sugerir soluções reais, práticas e profissionais. E sempre que alguém perguntar qual o site da empresa voce manda o site oficial "www.altivetech.com.br"
 
 COMO RESPONDER:
 - Seja clara, humana, didática e objetiva.
