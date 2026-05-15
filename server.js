@@ -32,23 +32,29 @@ async function enviarMensagem(numero, mensagem) {
   );
 }
 
+function normalizarNumero(numero) {
+  return String(numero || "").replace(/\D/g, "");
+}
+
 function pegarMensagem(body) {
   return (
     body.text?.message ||
     body.body ||
     body.message?.conversation ||
+    body.message ||
     ""
   );
 }
 
 function pegarNumero(body) {
-  return (
+  const numero =
     body.phone ||
     body.senderPhone ||
     body.from ||
     body.chatId ||
-    ""
-  );
+    "";
+
+  return normalizarNumero(numero);
 }
 
 function normalizarTexto(mensagem) {
@@ -75,6 +81,7 @@ app.post("/webhook", async (req, res) => {
     console.log("Mensagem:", mensagem);
     console.log("Número:", numero);
     console.log("FromMe:", fromMe);
+    console.log("Modo humano desse número:", atendimentoHumano[numero]);
 
     const comandoAssumir = texto.startsWith("/assumir");
     const comandoEncerrar = texto.startsWith("/encerrar");
@@ -86,6 +93,8 @@ app.post("/webhook", async (req, res) => {
     if (comandoAssumir) {
       atendimentoHumano[numero] = true;
 
+      console.log("Modo humano ATIVADO para:", numero);
+
       await enviarMensagem(
         numero,
         "✅ Atendimento assumido por um especialista da Altive. Pode continuar, estou acompanhando por aqui."
@@ -96,6 +105,8 @@ app.post("/webhook", async (req, res) => {
 
     if (comandoEncerrar) {
       delete atendimentoHumano[numero];
+
+      console.log("Modo humano ENCERRADO para:", numero);
 
       await enviarMensagem(
         numero,
@@ -120,6 +131,8 @@ app.post("/webhook", async (req, res) => {
     ) {
       atendimentoHumano[numero] = true;
 
+      console.log("Cliente pediu atendimento humano:", numero);
+
       await enviarMensagem(
         numero,
         "Perfeito. Vou encaminhar você para um especialista da Altive 👨‍💻\n\nPor favor, aguarde um instante. Enquanto isso, pode me adiantar qual serviço você procura?"
@@ -129,8 +142,25 @@ app.post("/webhook", async (req, res) => {
     }
 
     if (atendimentoHumano[numero]) {
+      console.log("IA pausada porque atendimento humano está ativo:", numero);
       return res.sendStatus(200);
     }
+
+    if (
+      texto.includes("site") ||
+      texto.includes("link") ||
+      texto.includes("endereço") ||
+      texto.includes("endereco")
+    ) {
+      await enviarMensagem(
+        numero,
+        "Claro! O site oficial da Altive é:\nhttps://altivetech.com.br"
+      );
+
+      return res.sendStatus(200);
+    }
+
+    console.log("Chamando IA para responder:", mensagem);
 
     const respostaIA = await openai.chat.completions.create({
       model: "gpt-4.1-mini",
@@ -213,7 +243,11 @@ IMPORTANTE:
 
     const resposta = respostaIA.choices[0].message.content;
 
+    console.log("Resposta da IA:", resposta);
+
     await enviarMensagem(numero, resposta);
+
+    console.log("Resposta enviada para:", numero);
 
     return res.sendStatus(200);
   } catch (erro) {
