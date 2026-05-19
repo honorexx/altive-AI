@@ -525,4 +525,3 @@ ${contextoExtra}
 app.listen(3000, () => {
   console.log("Altive IA profissional online 🚀");
 });
-```
