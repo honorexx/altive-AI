@@ -10,7 +10,7 @@ const app = express();
 app.use(express.json({ limit: "2mb" }));
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
+  apiKey: process.env.OPENAI_API_KEYapp.get("/painel"
 });
 
 const INSTANCE_ID = process.env.INSTANCE_ID;
@@ -597,7 +597,10 @@ function renderPainel() {
 }
 
 app.get("/painel", (req, res) => {
-  res.send(renderPainel());
+  res.status(200).send(`
+    <h1>Painel Altive</h1>
+    <p>Servidor funcionando.</p>
+  `);
 });
 
 app.get("/assumir/:numero", async (req, res) => {
