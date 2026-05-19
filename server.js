@@ -657,8 +657,23 @@ app.post("/webhook", async (req, res) => {
     console.log("FromMe:", fromMe);
     console.log("Estado:", c.estado);
 
-    if (fromMe) {
+    if (fromMe && texto.startsWith("/assumir")) {
+      atualizarContato(numero, { estado: ESTADOS.HUMANO });
+
+      console.log("ATENDIMENTO HUMANO ATIVADO:", numero);
+
       return res.sendStatus(200);
+    }
+
+    if (fromMe && (texto.startsWith("/encerrar") || texto.startsWith("/bot"))) {
+       atualizarContato(numero, { estado: ESTADOS.BOT });
+       console.log("IA REATIVADA:", numero);
+
+       return res.sendStatus(200);
+    }
+
+    if (fromMe) {
+       return res.sendStatus(200);
     }
 
     if (texto.startsWith("/assumir")) {
