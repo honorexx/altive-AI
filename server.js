@@ -756,6 +756,8 @@ app.post("/webhook", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Altive IA profissional online na porta ${PORT}`);
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Altive IA profissional online na porta ${PORT} 🚀`);
 });
