@@ -1,23 +1,159 @@
 require("dotenv").config();
 
+const fs = require("fs");
+const path = require("path");
 const express = require("express");
 const axios = require("axios");
 const OpenAI = require("openai");
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "2mb" }));
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-// Coloque esses dados no arquivo .env
 const INSTANCE_ID = process.env.INSTANCE_ID;
 const INSTANCE_TOKEN = process.env.INSTANCE_TOKEN;
 const CLIENT_TOKEN = process.env.CLIENT_TOKEN;
+const SITE_OFICIAL = "https://altivetech.com.br";
+const PORT = process.env.PORT || 3000;
+const DADOS_PATH = path.join(__dirname, "dados-bot.json");
 
-const atendimentoHumano = {};
-const historicoConversas = {};
+const ESTADOS = {
+  BOT: "bot",
+  AGUARDANDO_CONFIRMACAO_HUMANO: "aguardando_confirmacao_humano",
+  HUMANO: "humano"
+};
+
+const banco = carregarBanco();
+
+const servicosAltive = {
+  desenvolvimento_web: {
+    nome: "Desenvolvimento web",
+    descricao:
+      "Sites institucionais, landing pages, páginas de serviço, portais e experiências web responsivas, rápidas e pensadas para conversão.",
+    exemplos: ["site institucional", "landing page", "página de vendas", "portal web"]
+  },
+  automacao_processos: {
+    nome: "Automação de processos",
+    descricao:
+      "Automação de rotinas operacionais, atendimento, cadastros, tarefas repetitivas, integrações entre ferramentas e fluxos internos.",
+    exemplos: ["automação de atendimento", "integração de sistemas", "rotina operacional"]
+  },
+  sistemas_personalizados: {
+    nome: "Sistemas personalizados",
+    descricao:
+      "Sistemas sob medida para empresas que precisam controlar processos, clientes, pedidos, equipe, indicadores e regras próprias do negócio.",
+    exemplos: ["CRM próprio", "ERP leve", "painel administrativo", "sistema interno"]
+  },
+  operacoes_complexas: {
+    nome: "Soluções para operações complexas",
+    descricao:
+      "Projetos com controle, escalabilidade, permissões, múltiplas integrações, auditoria, automações e lógica profunda de negócio.",
+    exemplos: ["operação com várias áreas", "controle multiusuário", "integração profunda"]
+  },
+  inteligencia_artificial: {
+    nome: "Inteligência artificial",
+    descricao:
+      "IAs para atendimento, suporte, vendas, triagem, análise de dados, automação de respostas e integração com WhatsApp ou sistemas internos.",
+    exemplos: ["IA para WhatsApp", "chatbot treinado", "assistente comercial", "suporte com IA"]
+  },
+  dashboards_dados: {
+    nome: "Dashboards de dados",
+    descricao:
+      "Painéis para acompanhar indicadores, vendas, atendimento, operação, produtividade e dados estratégicos em tempo real ou por período.",
+    exemplos: ["dashboard comercial", "painel financeiro", "BI operacional"]
+  },
+  consultoria_digital: {
+    nome: "Consultoria digital",
+    descricao:
+      "Diagnóstico técnico e estratégico para definir arquitetura de dados, sistemas, integrações, automações, IA e próximos passos digitais.",
+    exemplos: ["arquitetura de dados", "mapa de automação", "estratégia de sistemas"]
+  }
+};
+
+const faixasOrcamento = {
+  landing_page: {
+    nome: "Landing page profissional",
+    faixa: "R$ 1.500 a R$ 5.000",
+    prazo: "7 a 20 dias",
+    observacao: "Varia conforme design, copy, formulário, integrações e quantidade de seções."
+  },
+  site_institucional: {
+    nome: "Site institucional",
+    faixa: "R$ 3.000 a R$ 12.000",
+    prazo: "15 a 45 dias",
+    observacao: "Depende da quantidade de páginas, conteúdo, SEO, blog e integrações."
+  },
+  automacao_whatsapp: {
+    nome: "Automação/IA para WhatsApp",
+    faixa: "R$ 2.500 a R$ 15.000+",
+    prazo: "10 a 45 dias",
+    observacao:
+      "Depende do fluxo, uso de IA, base de conhecimento, integrações, painel e atendimento humano."
+  },
+  sistema_personalizado: {
+    nome: "Sistema personalizado",
+    faixa: "R$ 8.000 a R$ 80.000+",
+    prazo: "30 a 120+ dias",
+    observacao:
+      "Depende de módulos, usuários, regras de negócio, permissões, relatórios, integrações e escalabilidade."
+  },
+  dashboard_dados: {
+    nome: "Dashboard de dados",
+    faixa: "R$ 3.500 a R$ 25.000+",
+    prazo: "15 a 60 dias",
+    observacao: "Depende das fontes de dados, métricas, atualização automática e nível de análise."
+  },
+  consultoria_digital: {
+    nome: "Consultoria digital/arquitetura",
+    faixa: "R$ 800 a R$ 5.000 por diagnóstico inicial",
+    prazo: "3 a 15 dias",
+    observacao:
+      "Pode virar um plano técnico com arquitetura, prioridades, ferramentas, integrações e estimativa de implantação."
+  }
+};
+
+function carregarBanco() {
+  try {
+    if (!fs.existsSync(DADOS_PATH)) {
+      return { contatos: {} };
+    }
+
+    return JSON.parse(fs.readFileSync(DADOS_PATH, "utf8"));
+  } catch (erro) {
+    console.log("Não foi possível carregar dados-bot.json:", erro.message);
+    return { contatos: {} };
+  }
+}
+
+function salvarBanco() {
+  fs.writeFileSync(DADOS_PATH, JSON.stringify(banco, null, 2));
+}
+
+function contato(numero) {
+  if (!banco.contatos[numero]) {
+    banco.contatos[numero] = {
+      numero,
+      estado: ESTADOS.BOT,
+      historico: [],
+      resumo: "",
+      dados: {},
+      criadoEm: new Date().toISOString(),
+      atualizadoEm: new Date().toISOString()
+    };
+  }
+
+  return banco.contatos[numero];
+}
+
+function atualizarContato(numero, patch = {}) {
+  const c = contato(numero);
+  Object.assign(c, patch, { atualizadoEm: new Date().toISOString() });
+  salvarBanco();
+  return c;
+}
 
 async function enviarMensagem(numero, mensagem) {
   await axios.post(
@@ -49,13 +185,7 @@ function pegarMensagem(body) {
 }
 
 function pegarNumero(body) {
-  const numero =
-    body.phone ||
-    body.senderPhone ||
-    body.from ||
-    body.chatId ||
-    "";
-
+  const numero = body.phone || body.senderPhone || body.from || body.chatId || "";
   return normalizarNumero(numero);
 }
 
@@ -63,235 +193,445 @@ function normalizarTexto(mensagem) {
   return String(mensagem || "")
     .trim()
     .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/^\/\s+/, "/");
 }
 
 function salvarHistorico(numero, role, content) {
-  if (!historicoConversas[numero]) {
-    historicoConversas[numero] = [];
+  const c = contato(numero);
+  c.historico.push({ role, content, at: new Date().toISOString() });
+
+  if (c.historico.length > 24) {
+    c.historico = c.historico.slice(-24);
   }
 
-  historicoConversas[numero].push({ role, content });
+  c.atualizadoEm = new Date().toISOString();
+  salvarBanco();
+}
 
-  // Mantém só as últimas mensagens para a IA não ficar pesada
-  if (historicoConversas[numero].length > 14) {
-    historicoConversas[numero] = historicoConversas[numero].slice(-14);
-  }
+function ultimasMensagens(numero) {
+  return contato(numero).historico.map(({ role, content }) => ({ role, content }));
 }
 
 function detectarIntencao(texto) {
-  if (
-    texto.includes("site") ||
-    texto.includes("landing") ||
-    texto.includes("pagina") ||
-    texto.includes("página")
-  ) {
-    return "site";
-  }
-
-  if (
-    texto.includes("whatsapp") ||
-    texto.includes("zap") ||
-    texto.includes("automação") ||
-    texto.includes("automacao") ||
-    texto.includes("mensagem automática") ||
-    texto.includes("mensagem automatica")
-  ) {
-    return "automacao_whatsapp";
-  }
-
-  if (
-    texto.includes("ia") ||
-    texto.includes("inteligência artificial") ||
-    texto.includes("inteligencia artificial") ||
-    texto.includes("chatbot") ||
-    texto.includes("bot")
-  ) {
-    return "ia";
-  }
-
-  if (
-    texto.includes("sistema") ||
-    texto.includes("plataforma") ||
-    texto.includes("software") ||
-    texto.includes("dashboard") ||
-    texto.includes("painel")
-  ) {
-    return "sistema";
-  }
-
-  if (
-    texto.includes("valor") ||
-    texto.includes("preço") ||
-    texto.includes("preco") ||
-    texto.includes("orçamento") ||
-    texto.includes("orcamento") ||
-    texto.includes("quanto custa")
-  ) {
+  if (temAlgum(texto, ["orcamento", "quanto custa", "valor", "preco", "investimento"])) {
     return "orcamento";
   }
 
-  if (
-    texto.includes("empresa") ||
-    texto.includes("altive") ||
-    texto.includes("quem são") ||
-    texto.includes("quem sao") ||
-    texto.includes("o que vocês fazem") ||
-    texto.includes("oque vocês fazem") ||
-    texto.includes("o que voces fazem")
-  ) {
+  if (temAlgum(texto, ["site", "landing", "pagina", "web"])) {
+    return "desenvolvimento_web";
+  }
+
+  if (temAlgum(texto, ["whatsapp", "zap", "automacao", "mensagem automatica"])) {
+    return "automacao_whatsapp";
+  }
+
+  if (temAlgum(texto, ["ia", "inteligencia artificial", "chatbot", "bot", "assistente"])) {
+    return "inteligencia_artificial";
+  }
+
+  if (temAlgum(texto, ["dashboard", "bi", "indicador", "relatorio", "dados"])) {
+    return "dashboards_dados";
+  }
+
+  if (temAlgum(texto, ["sistema", "plataforma", "software", "painel", "crm", "erp"])) {
+    return "sistemas_personalizados";
+  }
+
+  if (temAlgum(texto, ["consultoria", "arquitetura", "diagnostico", "estrategia"])) {
+    return "consultoria_digital";
+  }
+
+  if (temAlgum(texto, ["empresa", "altive", "quem sao", "o que voces fazem"])) {
     return "sobre_altive";
   }
 
   return "geral";
 }
 
-function contextoPorIntencao(intencao) {
-  const contextos = {
-    site: `
-O cliente parece interessado em site ou landing page.
-Explique que a Altive pode criar uma presença digital profissional, com design moderno, responsivo, rápido, estratégico e voltado para conversão.
-Sugira possibilidades como: página institucional, landing page para campanhas, página de serviços, formulário de contato, botão de WhatsApp, SEO básico e integração com ferramentas.
-`,
-
-    automacao_whatsapp: `
-O cliente parece interessado em automação no WhatsApp.
-Explique que a Altive pode criar fluxos inteligentes para responder clientes, filtrar interessados, explicar serviços, coletar informações e encaminhar para humano quando necessário.
-Deixe claro que não é recomendado disparar mensagens em massa sem autorização, pois isso pode bloquear ou restringir o número.
-Sugira uma automação segura e profissional.
-`,
-
-    ia: `
-O cliente parece interessado em inteligência artificial.
-Explique que a Altive pode criar uma IA para atendimento, suporte, qualificação comercial, dúvidas frequentes, triagem de clientes e integração com WhatsApp ou sistemas.
-Mostre que a IA pode ser treinada com informações da empresa, serviços, regras, limites e linguagem da marca.
-`,
-
-    sistema: `
-O cliente parece interessado em sistema, software, painel ou plataforma.
-Explique que a Altive pode criar sistemas personalizados para organizar processos, cadastrar clientes, acompanhar pedidos, controlar tarefas, gerar relatórios, automatizar rotinas e centralizar informações.
-`,
-
-    orcamento: `
-O cliente está falando de preço ou orçamento.
-Explique que o valor depende do tipo de projeto, quantidade de funcionalidades, integrações e complexidade.
-Não informe valor fechado sem análise.
-Conduza para entender rapidamente a necessidade e ofereça encaminhar para especialista.
-`,
-
-    sobre_altive: `
-O cliente quer entender a Altive.
-Explique que a Altive é uma empresa de tecnologia que cria soluções digitais para empresas, como sites, sistemas, automações, IA, integração com WhatsApp e transformação digital.
-Passe segurança, profissionalismo e clareza.
-`,
-
-    geral: `
-O cliente ainda não deixou totalmente claro o que precisa.
-Responda com inteligência, tente identificar o problema e ofereça possibilidades reais sem fazer muitas perguntas.
-`
-  };
-
-  return contextos[intencao] || contextos.geral;
+function temAlgum(texto, palavras) {
+  return palavras.some(palavra => texto.includes(palavra));
 }
 
-app.get("/painel", (req, res) => {
-  const numeros = Object.keys(atendimentoHumano);
+function respostaPositiva(texto) {
+  return [
+    "sim",
+    "s",
+    "ok",
+    "okay",
+    "pode",
+    "pode sim",
+    "quero",
+    "quero sim",
+    "claro",
+    "beleza",
+    "fechado",
+    "manda",
+    "chama",
+    "chamar",
+    "por favor"
+  ].some(palavra => texto === palavra || texto.includes(palavra));
+}
 
-  const lista = numeros.length
-    ? numeros.map(numero => `
-      <div class="card">
-        <div>
-          <strong>${numero}</strong>
-          <p>Atendimento humano ativo</p>
-        </div>
-        <div>
-          <a class="btn assumir" href="/assumir/${numero}">Assumir</a>
-          <a class="btn encerrar" href="/encerrar/${numero}">Encerrar</a>
-        </div>
-      </div>
-    `).join("")
-    : "<p>Nenhum atendimento humano ativo.</p>";
+function pediuHumano(texto) {
+  return temAlgum(texto, [
+    "especialista",
+    "atendente",
+    "humano",
+    "pessoa",
+    "falar com alguem",
+    "falar com uma pessoa",
+    "chama alguem",
+    "chamar alguem",
+    "pessoa real",
+    "vendedor",
+    "consultor"
+  ]);
+}
 
-  res.send(`
+function deveSugerirHumano(texto, intencao) {
+  return (
+    intencao === "orcamento" ||
+    temAlgum(texto, [
+      "contratar",
+      "fechar",
+      "proposta",
+      "reuniao",
+      "urgente",
+      "integracao",
+      "complexo",
+      "api",
+      "banco de dados"
+    ])
+  );
+}
+
+function tipoOrcamentoPorTexto(texto, intencao) {
+  if (temAlgum(texto, ["landing"])) return "landing_page";
+  if (temAlgum(texto, ["site", "pagina"])) return "site_institucional";
+  if (temAlgum(texto, ["whatsapp", "zap", "chatbot", "bot", "ia"])) return "automacao_whatsapp";
+  if (temAlgum(texto, ["dashboard", "bi", "relatorio", "indicador"])) return "dashboard_dados";
+  if (temAlgum(texto, ["consultoria", "arquitetura", "diagnostico"])) return "consultoria_digital";
+  if (temAlgum(texto, ["sistema", "software", "plataforma", "painel", "crm", "erp"])) {
+    return "sistema_personalizado";
+  }
+
+  if (intencao === "desenvolvimento_web") return "site_institucional";
+  if (intencao === "automacao_whatsapp" || intencao === "inteligencia_artificial") {
+    return "automacao_whatsapp";
+  }
+  if (intencao === "dashboards_dados") return "dashboard_dados";
+  if (intencao === "consultoria_digital") return "consultoria_digital";
+  if (intencao === "sistemas_personalizados") return "sistema_personalizado";
+
+  return null;
+}
+
+function contextoOrcamento(tipo) {
+  if (!tipo || !faixasOrcamento[tipo]) {
+    return "Ainda não há tipo de orçamento claro. Explique que precisa entender se é site, IA, automação, sistema, dashboard ou consultoria.";
+  }
+
+  const item = faixasOrcamento[tipo];
+  return `
+Referência interna de orçamento para ${item.nome}:
+- Faixa comum: ${item.faixa}
+- Prazo comum: ${item.prazo}
+- Observação: ${item.observacao}
+
+Use isso como noção inicial, nunca como proposta fechada. Diga que o valor final depende do escopo.
+`;
+}
+
+async function pesquisarMercadoSeDisponivel(consulta) {
+  if (!process.env.SERPAPI_KEY) {
+    return "Pesquisa externa não configurada. Use as faixas internas como referência.";
+  }
+
+  try {
+    const { data } = await axios.get("https://serpapi.com/search.json", {
+      params: {
+        engine: "google",
+        q: consulta,
+        gl: "br",
+        hl: "pt-br",
+        api_key: process.env.SERPAPI_KEY
+      },
+      timeout: 8000
+    });
+
+    const resultados = (data.organic_results || [])
+      .slice(0, 4)
+      .map(r => `- ${r.title}: ${r.snippet || r.link}`)
+      .join("\n");
+
+    return resultados || "A pesquisa externa não retornou dados úteis.";
+  } catch (erro) {
+    console.log("Erro na pesquisa externa:", erro.message);
+    return "Não consegui pesquisar o mercado agora. Use as faixas internas como referência.";
+  }
+}
+
+function montarConhecimentoAltive() {
+  return Object.values(servicosAltive)
+    .map(servico => {
+      return `${servico.nome}: ${servico.descricao} Exemplos: ${servico.exemplos.join(", ")}.`;
+    })
+    .join("\n");
+}
+
+async function gerarRespostaIA({ numero, mensagem, texto, intencao, tipoOrcamento }) {
+  const c = contato(numero);
+  const contextoMercado =
+    intencao === "orcamento" || tipoOrcamento
+      ? await pesquisarMercadoSeDisponivel(
+          `preço médio Brasil ${faixasOrcamento[tipoOrcamento]?.nome || "desenvolvimento de software"} 2026`
+        )
+      : "Não necessário nesta resposta.";
+
+  const respostaIA = await openai.chat.completions.create({
+    model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
+    temperature: 0.55,
+    response_format: { type: "json_object" },
+    messages: [
+      {
+        role: "system",
+        content: `
+Você é a assistente virtual oficial da Altive, uma empresa brasileira de tecnologia.
+
+Seu objetivo é conversar como uma consultora de tecnologia: entender o problema, sugerir caminhos reais e conduzir para orçamento ou especialista quando fizer sentido.
+
+SITE OFICIAL:
+${SITE_OFICIAL}
+Nunca informe outro domínio.
+
+SERVIÇOS DA ALTIVE:
+${montarConhecimentoAltive()}
+
+REFERÊNCIAS DE ORÇAMENTO:
+${contextoOrcamento(tipoOrcamento)}
+
+CONTEXTO DE MERCADO:
+${contextoMercado}
+
+ESTADO DO CONTATO:
+- Estado atual: ${c.estado}
+- Resumo salvo: ${c.resumo || "sem resumo"}
+- Dados conhecidos: ${JSON.stringify(c.dados || {})}
+
+REGRAS:
+- Responda em português do Brasil.
+- Seja clara, humana, inteligente e objetiva.
+- Não diga que é ChatGPT.
+- Não faça muitas perguntas. Faça no máximo uma pergunta útil por resposta.
+- Não dê orçamento fechado. Dê faixa estimada quando houver base, com ressalva de complexidade.
+- Se o cliente pedir preço, dê uma noção por faixa e explique o que muda o valor.
+- Se perceber projeto complexo, orçamento real, contratação, integração ou dúvida comercial, ofereça especialista.
+- Quando oferecer especialista, deixe claro que a pessoa pode responder "sim", "ok" ou "pode" para encaminhar.
+- Não prometa spam, disparo abusivo ou burla de regras do WhatsApp.
+- Para campanhas no WhatsApp, recomende consentimento, WhatsApp Business API oficial, lista autorizada e captação voluntária.
+- Não responda em formato de lista grande se uma resposta curta resolver.
+
+A resposta deve ser SOMENTE um JSON válido com este formato:
+{
+  "mensagem": "texto que será enviado ao cliente",
+  "ofereceu_humano": true ou false,
+  "acionar_humano_agora": true ou false,
+  "resumo": "resumo curto atualizado do cliente e necessidade",
+  "dados": {
+    "interesse": "serviço provável",
+    "complexidade": "baixa|media|alta|desconhecida",
+    "orcamento_tipo": "tipo provável ou vazio"
+  }
+}
+`
+      },
+      ...ultimasMensagens(numero),
+      { role: "user", content: mensagem }
+    ]
+  });
+
+  try {
+    return JSON.parse(respostaIA.choices[0].message.content);
+  } catch (erro) {
+    return {
+      mensagem:
+        "Entendi. A Altive consegue analisar esse cenário e sugerir o caminho mais adequado. Para eu te orientar melhor, você está pensando em site, sistema, automação, IA ou dashboard?",
+      ofereceu_humano: false,
+      acionar_humano_agora: false,
+      resumo: c.resumo,
+      dados: c.dados
+    };
+  }
+}
+
+function escaparHtml(valor) {
+  return String(valor || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function renderPainel() {
+  const contatos = Object.values(banco.contatos).sort(
+    (a, b) => new Date(b.atualizadoEm) - new Date(a.atualizadoEm)
+  );
+
+  const cards = contatos.length
+    ? contatos
+        .map(c => {
+          const status =
+            c.estado === ESTADOS.HUMANO
+              ? "Atendimento humano ativo"
+              : c.estado === ESTADOS.AGUARDANDO_CONFIRMACAO_HUMANO
+                ? "Aguardando confirmação para humano"
+                : "IA atendendo";
+
+          const ultima = c.historico[c.historico.length - 1]?.content || "Sem mensagens";
+
+          return `
+            <article class="card ${c.estado}">
+              <div class="card-top">
+                <div>
+                  <strong>${escaparHtml(c.numero)}</strong>
+                  <p>${escaparHtml(status)}</p>
+                </div>
+                <span>${new Date(c.atualizadoEm).toLocaleString("pt-BR")}</span>
+              </div>
+              <p class="resumo">${escaparHtml(c.resumo || "Sem resumo salvo ainda.")}</p>
+              <p class="ultima">${escaparHtml(ultima)}</p>
+              <div class="acoes">
+                <a class="btn assumir" href="/assumir/${c.numero}">Assumir</a>
+                <a class="btn bot" href="/bot/${c.numero}">Voltar IA</a>
+                <a class="btn encerrar" href="/encerrar/${c.numero}">Encerrar</a>
+              </div>
+            </article>
+          `;
+        })
+        .join("")
+    : "<p>Nenhum contato registrado ainda.</p>";
+
+  return `
     <html>
       <head>
         <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Painel Altive</title>
         <style>
+          * { box-sizing: border-box; }
           body {
             font-family: Arial, sans-serif;
-            background: #0f172a;
-            color: white;
-            padding: 30px;
+            background: #0b1020;
+            color: #f8fafc;
+            padding: 28px;
+            margin: 0;
           }
-
-          h1 {
-            color: #38bdf8;
-          }
-
-          .card {
-            background: #1e293b;
-            padding: 20px;
-            border-radius: 12px;
-            margin-bottom: 15px;
+          header {
             display: flex;
             justify-content: space-between;
-            align-items: center;
+            align-items: end;
+            gap: 16px;
+            margin-bottom: 22px;
           }
-
-          .card p {
-            color: #94a3b8;
-            margin: 5px 0 0;
+          h1 { color: #38bdf8; margin: 0; font-size: 28px; }
+          header p { color: #94a3b8; margin: 6px 0 0; }
+          .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 14px;
           }
-
-          .btn {
-            padding: 10px 15px;
+          .card {
+            background: #151d31;
+            border: 1px solid #25324a;
             border-radius: 8px;
+            padding: 18px;
+          }
+          .card.humano { border-color: #22c55e; }
+          .card.aguardando_confirmacao_humano { border-color: #f59e0b; }
+          .card-top {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: start;
+          }
+          .card strong { font-size: 18px; }
+          .card p { color: #a8b3c7; margin: 5px 0 0; line-height: 1.35; }
+          .card span { color: #64748b; font-size: 12px; white-space: nowrap; }
+          .resumo {
+            margin-top: 14px !important;
+            color: #e2e8f0 !important;
+          }
+          .ultima {
+            background: #0f172a;
+            border-radius: 8px;
+            padding: 10px;
+            max-height: 95px;
+            overflow: auto;
+          }
+          .acoes { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px; }
+          .btn {
+            padding: 9px 12px;
+            border-radius: 7px;
             text-decoration: none;
             color: white;
-            margin-left: 8px;
             display: inline-block;
+            font-size: 14px;
           }
-
-          .assumir {
-            background: #2563eb;
-          }
-
-          .encerrar {
-            background: #16a34a;
-          }
+          .assumir { background: #2563eb; }
+          .bot { background: #475569; }
+          .encerrar { background: #16a34a; }
         </style>
       </head>
-
       <body>
-        <h1>Painel de Atendimento Altive</h1>
-        ${lista}
+        <header>
+          <div>
+            <h1>Painel de Atendimento Altive</h1>
+            <p>Contatos, estados da IA e atendimentos humanos.</p>
+          </div>
+        </header>
+        <main class="grid">${cards}</main>
       </body>
     </html>
-  `);
+  `;
+}
+
+app.get("/painel", (req, res) => {
+  res.send(renderPainel());
 });
 
 app.get("/assumir/:numero", async (req, res) => {
-  const numero = req.params.numero;
-
-  atendimentoHumano[numero] = true;
+  const numero = normalizarNumero(req.params.numero);
+  atualizarContato(numero, { estado: ESTADOS.HUMANO });
 
   await enviarMensagem(
     numero,
-    "✅ Atendimento assumido por um especialista da Altive. Pode continuar por aqui, nossa equipe está acompanhando."
+    "Atendimento assumido por um especialista da Altive. Pode continuar por aqui, nossa equipe está acompanhando."
+  );
+
+  res.redirect("/painel");
+});
+
+app.get("/bot/:numero", async (req, res) => {
+  const numero = normalizarNumero(req.params.numero);
+  atualizarContato(numero, { estado: ESTADOS.BOT });
+
+  await enviarMensagem(
+    numero,
+    "Pronto, a assistente virtual da Altive voltou para te ajudar por aqui."
   );
 
   res.redirect("/painel");
 });
 
 app.get("/encerrar/:numero", async (req, res) => {
-  const numero = req.params.numero;
-
-  delete atendimentoHumano[numero];
+  const numero = normalizarNumero(req.params.numero);
+  atualizarContato(numero, { estado: ESTADOS.BOT });
 
   await enviarMensagem(
     numero,
-    "A Altive agradece o seu contato! O atendimento humano foi encerrado e nossa assistente virtual está de volta. 🚀"
+    "A Altive agradece o seu contato! O atendimento humano foi encerrado e nossa assistente virtual está de volta."
   );
 
   res.redirect("/painel");
@@ -309,211 +649,105 @@ app.post("/webhook", async (req, res) => {
       return res.sendStatus(200);
     }
 
+    const c = contato(numero);
     const texto = normalizarTexto(mensagem);
 
     console.log("Mensagem:", mensagem);
     console.log("Número:", numero);
     console.log("FromMe:", fromMe);
-    console.log("Modo humano:", atendimentoHumano[numero]);
-
-    const comandoAssumir = texto.startsWith("/assumir");
-    const comandoEncerrar = texto.startsWith("/encerrar");
-
-    if (comandoAssumir) {
-      atendimentoHumano[numero] = true;
-
-      await enviarMensagem(
-        numero,
-        "✅ Atendimento assumido por um especialista da Altive. Pode continuar, estou acompanhando por aqui."
-      );
-
-      return res.sendStatus(200);
-    }
-
-    if (comandoEncerrar) {
-      delete atendimentoHumano[numero];
-
-      await enviarMensagem(
-        numero,
-        "A Altive agradece o seu contato! O atendimento humano foi encerrado e nossa assistente virtual está de volta. 🚀"
-      );
-
-      return res.sendStatus(200);
-    }
+    console.log("Estado:", c.estado);
 
     if (fromMe) {
       return res.sendStatus(200);
     }
 
-    if (
-      texto.includes("especialista") ||
-      texto.includes("atendente") ||
-      texto.includes("humano") ||
-      texto.includes("falar com alguém") ||
-      texto.includes("falar com uma pessoa") ||
-      texto.includes("quero falar com alguém") ||
-      texto.includes("chama alguém") ||
-      texto.includes("chamar alguem") ||
-      texto.includes("pessoa real")
-    ) {
-      atendimentoHumano[numero] = true;
+    if (texto.startsWith("/assumir")) {
+      atualizarContato(numero, { estado: ESTADOS.HUMANO });
+      await enviarMensagem(numero, "Atendimento humano ativado. Um especialista da Altive está acompanhando.");
+      return res.sendStatus(200);
+    }
+
+    if (texto.startsWith("/encerrar") || texto.startsWith("/bot")) {
+      atualizarContato(numero, { estado: ESTADOS.BOT });
+      await enviarMensagem(numero, "Atendimento da IA reativado. Pode mandar sua dúvida.");
+      return res.sendStatus(200);
+    }
+
+    if (c.estado === ESTADOS.AGUARDANDO_CONFIRMACAO_HUMANO && respostaPositiva(texto)) {
+      salvarHistorico(numero, "user", mensagem);
+      atualizarContato(numero, {
+        estado: ESTADOS.HUMANO,
+        resumo: c.resumo || "Cliente confirmou que deseja falar com especialista."
+      });
 
       await enviarMensagem(
         numero,
-        "Perfeito. Vou encaminhar você para um especialista da Altive 👨‍💻\n\nPor favor, aguarde um instante."
+        "Perfeito. Vou encaminhar você para um especialista da Altive. Por favor, aguarde um instante."
       );
 
       return res.sendStatus(200);
     }
 
-    if (atendimentoHumano[numero]) {
+    if (pediuHumano(texto)) {
+      salvarHistorico(numero, "user", mensagem);
+      atualizarContato(numero, {
+        estado: ESTADOS.HUMANO,
+        resumo: c.resumo || "Cliente pediu atendimento humano."
+      });
+
+      await enviarMensagem(
+        numero,
+        "Perfeito. Vou encaminhar você para um especialista da Altive. Por favor, aguarde um instante."
+      );
+
       return res.sendStatus(200);
     }
 
-    if (
-      texto.includes("link") ||
-      texto.includes("endereço") ||
-      texto.includes("endereco") ||
-      texto.includes("site oficial")
-    ) {
-      await enviarMensagem(
-        numero,
-        "Claro! O site oficial da Altive é:\nhttps://altivetech.com.br"
-      );
+    if (c.estado === ESTADOS.HUMANO) {
+      salvarHistorico(numero, "user", mensagem);
+      return res.sendStatus(200);
+    }
 
+    if (temAlgum(texto, ["link", "endereco", "site oficial"])) {
+      await enviarMensagem(numero, `Claro. O site oficial da Altive é:\n${SITE_OFICIAL}`);
       return res.sendStatus(200);
     }
 
     const intencao = detectarIntencao(texto);
-    const contextoExtra = contextoPorIntencao(intencao);
+    const tipoOrcamento = tipoOrcamentoPorTexto(texto, intencao);
 
     salvarHistorico(numero, "user", mensagem);
 
-    const respostaIA = await openai.chat.completions.create({
-      model: "gpt-4.1-mini",
-      temperature: 0.75,
-      messages: [
-        {
-          role: "system",
-          content: `
-Você é a assistente virtual oficial da Altive, uma empresa moderna de tecnologia.
-
-A Altive cria soluções digitais para empresas, como:
-• sites profissionais
-• landing pages
-• sistemas personalizados
-• automações
-• inteligência artificial para atendimento
-• integração com WhatsApp
-• sistemas internos
-• painéis administrativos
-• dashboards
-• soluções em nuvem
-• transformação digital
-
-SOBRE A ALTIVE:
-A Altive ajuda empresas a ficarem mais profissionais, organizadas e eficientes usando tecnologia.
-A empresa pode criar desde um site moderno até automações, sistemas internos e atendentes virtuais com IA.
-O objetivo é elevar o negócio do cliente para um nível mais digital, profissional e inteligente.
-
-SITE OFICIAL:
-https://altivetech.com.br
-Nunca informe altive.com.br.
-
-SEU PAPEL:
-Você não deve apenas fazer perguntas.
-Você deve entender o problema do cliente e sugerir soluções reais, práticas e profissionais.
-Você deve soar como uma consultora de tecnologia experiente, não como um robô genérico.
-
-COMO RESPONDER:
-- Seja clara, humana, didática e objetiva.
-- Não repita "Olá" em toda mensagem.
-- Não faça muitas perguntas seguidas.
-- Sempre que possível, dê uma sugestão de solução.
-- Explique o que a Altive poderia fazer para resolver o problema.
-- Se precisar de informação, faça no máximo 1 ou 2 perguntas por vez.
-- Evite respostas genéricas.
-- Demonstre conhecimento técnico real, mas sem complicar.
-- Seja atenta ao contexto da conversa.
-- Não responda como se fosse suporte técnico frio.
-- Responda como uma consultora que quer ajudar o cliente a tomar uma decisão.
-
-FORMATO IDEAL:
-Quando o cliente trouxer um problema, responda assim:
-1. Mostre que entendeu.
-2. Explique uma solução possível.
-3. Mostre como a Altive poderia ajudar.
-4. Faça no máximo uma pergunta útil para avançar.
-
-EXEMPLO 1:
-Cliente: "quero automatizar meu WhatsApp"
-Resposta boa:
-"Dá para criar uma automação no WhatsApp para responder clientes, filtrar interessados, explicar seus serviços e encaminhar para um especialista quando necessário. O ideal é montar um fluxo com respostas inteligentes, opção de atendimento humano e regras para evitar mensagens abusivas. Você quer automatizar atendimento, vendas ou suporte?"
-
-EXEMPLO 2:
-Cliente: "preciso de um site"
-Resposta boa:
-"Perfeito. Um site profissional pode ajudar sua empresa a passar mais confiança, apresentar serviços e receber contatos pelo WhatsApp. A Altive pode criar uma página moderna, responsiva e conectada com formulários, botões de contato e até automações. Seria um site institucional ou uma página focada em vender um serviço específico?"
-
-EXEMPLO 3:
-Cliente: "quanto custa?"
-Resposta boa:
-"O valor depende do tipo de projeto, quantidade de páginas, funcionalidades e integrações. Um site simples, uma landing page e um sistema com IA têm níveis bem diferentes de complexidade. Me diga rapidamente o que você quer criar que eu te explico o caminho ideal e posso encaminhar para um especialista montar o orçamento."
-
-LIMITES IMPORTANTES:
-- Nunca prometa automações abusivas ou spam.
-- Não ofereça sistema para disparar mensagens em massa para centenas de pessoas no WhatsApp.
-- Explique que enviar 500 mensagens para 500 pessoas diferentes pode derrubar, bloquear ou restringir o número.
-- Para campanhas, recomende formas seguras:
-  • lista de transmissão autorizada
-  • clientes que deram consentimento
-  • campanhas moderadas
-  • WhatsApp Business API oficial
-  • funis com captação voluntária
-- Não prometa burlar regras do WhatsApp.
-- Não incentive envio de mensagens sem autorização.
-
-ATENDIMENTO HUMANO:
-Você pode recomendar atendimento humano quando perceber:
-• projetos complexos
-• orçamento detalhado
-• integração avançada
-• decisões importantes
-• dúvidas muito específicas
-• necessidade comercial
-
-Nesses casos, diga naturalmente:
-"Posso encaminhar você para um especialista da Altive para analisarmos isso com mais profundidade."
-
-PREÇOS:
-Se perguntarem preço, diga que depende do tipo de projeto, funcionalidades e complexidade.
-Não confirme orçamento fechado sem especialista.
-
-TOM:
-Profissional, moderno, inteligente, direto e compreensível.
-
-IMPORTANTE:
-- Nunca diga que é ChatGPT.
-- Não invente promessas.
-- Não confirme orçamento fechado sem especialista.
-- Não envie respostas muito longas sem necessidade.
-- Não seja passiva. Sugira caminhos.
-- Não diga apenas "me fale mais". Ajude antes de perguntar.
-
-CONTEXTO DA MENSAGEM ATUAL:
-Intenção detectada: ${intencao}
-${contextoExtra}
-`
-        },
-        ...historicoConversas[numero]
-      ]
+    const resposta = await gerarRespostaIA({
+      numero,
+      mensagem,
+      texto,
+      intencao,
+      tipoOrcamento
     });
 
-    const resposta = respostaIA.choices[0].message.content;
+    const novaMensagem = resposta.mensagem || "Entendi. Posso te ajudar a encontrar o melhor caminho.";
+    salvarHistorico(numero, "assistant", novaMensagem);
 
-    salvarHistorico(numero, "assistant", resposta);
+    const novoEstado =
+      resposta.acionar_humano_agora || (deveSugerirHumano(texto, intencao) && pediuHumano(novaMensagem))
+        ? ESTADOS.HUMANO
+        : resposta.ofereceu_humano
+          ? ESTADOS.AGUARDANDO_CONFIRMACAO_HUMANO
+          : ESTADOS.BOT;
 
-    await enviarMensagem(numero, resposta);
+    atualizarContato(numero, {
+      estado: novoEstado,
+      resumo: resposta.resumo || c.resumo,
+      dados: {
+        ...(c.dados || {}),
+        ...(resposta.dados || {}),
+        intencao,
+        tipoOrcamento
+      }
+    });
+
+    await enviarMensagem(numero, novaMensagem);
 
     return res.sendStatus(200);
   } catch (erro) {
@@ -522,6 +756,6 @@ ${contextoExtra}
   }
 });
 
-app.listen(3000, () => {
-  console.log("Altive IA profissional online 🚀");
+app.listen(PORT, () => {
+  console.log(`Altive IA profissional online na porta ${PORT}`);
 });
