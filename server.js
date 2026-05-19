@@ -17,7 +17,6 @@ const INSTANCE_ID = process.env.INSTANCE_ID;
 const INSTANCE_TOKEN = process.env.INSTANCE_TOKEN;
 const CLIENT_TOKEN = process.env.CLIENT_TOKEN;
 const SITE_OFICIAL = "https://altivetech.com.br";
-const PORT = process.env.PORT || 3000;
 const DADOS_PATH = path.join(__dirname, "dados-bot.json");
 
 const ESTADOS = {
